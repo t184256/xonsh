@@ -31,6 +31,10 @@ def _DEFS():
         'CLEAN': '{BOLD_GREEN}✓',
         'AHEAD': '↑·',
         'BEHIND': '↓·',
+        'PARTS_SEPARATOR': '|',
+        'AHEAD_BEHIND_SEPARATOR': '',
+        'OPERATIONS_SEPARATOR': '|',
+        'NUMBERS_SEPARATOR': '',
     }
     return DEFS
 
@@ -117,7 +121,7 @@ def gitstatus():
 
 
 def gitstatus_prompt():
-    """Return str `BRANCH|OPERATOR|numbers`"""
+    """Return a prompt with branch, operations and working tree status"""
     try:
         (branch, num_ahead, num_behind,
          untracked, changed, conflicts, staged, stashed,
@@ -125,26 +129,39 @@ def gitstatus_prompt():
     except subprocess.SubprocessError:
         return None
 
-    ret = _get_def('BRANCH') + branch
-    if num_ahead > 0:
-        ret += _get_def('AHEAD') + str(num_ahead)
-    if num_behind > 0:
-        ret += _get_def('BEHIND') + str(num_behind)
-    if operations:
-        ret += _get_def('OPERATION') + '|' + '|'.join(operations)
-    ret += '|'
-    if staged > 0:
-        ret += _get_def('STAGED') + str(staged) + '{NO_COLOR}'
-    if conflicts > 0:
-        ret += _get_def('CONFLICTS') + str(conflicts) + '{NO_COLOR}'
-    if changed > 0:
-        ret += _get_def('CHANGED') + str(changed) + '{NO_COLOR}'
-    if untracked > 0:
-        ret += _get_def('UNTRACKED') + str(untracked) + '{NO_COLOR}'
-    if stashed > 0:
-        ret += _get_def('STASHED') + str(stashed) + '{NO_COLOR}'
-    if staged + conflicts + changed + untracked + stashed == 0:
-        ret += _get_def('CLEAN') + '{NO_COLOR}'
-    ret += '{NO_COLOR}'
+    prompt = []
 
-    return ret
+    branch_part = [_get_def('BRANCH') + branch]
+    if num_ahead > 0 and _get_def('AHEAD'):
+        branch_part.append(_get_def('AHEAD') + str(num_ahead))
+    if num_behind > 0 and _get_def('BEHIND'):
+        branch_part.append(_get_def('BEHIND') + str(num_behind))
+    branch_str = _get_def('AHEAD_BEHIND_SEPARATOR').join(branch_part)
+    prompt.append(branch_str)
+
+    if operations:
+        operations_part = [_get_def('OPERATION')]
+        operations_part.extend(operations)
+        operations_str = _get_def('OPERATIONS_SEPARATOR').join(operations_part)
+        prompt.append(operations_str)
+
+    numbers_part = []
+    if staged > 0 and _get_def('STAGED'):
+        numbers_part.append(_get_def('STAGED') + str(staged))
+    if conflicts > 0 and _get_def('CONFLICTS'):
+        numbers_part.append(_get_def('CONFLICTS') + str(conflicts))
+    if changed > 0 and _get_def('CHANGED'):
+        numbers_part.append(_get_def('CHANGED') + str(changed))
+    if untracked > 0 and _get_def('UNTRACKED'):
+        numbers_part.append(_get_def('UNTRACKED') + str(untracked))
+    if stashed > 0 and _get_def('STASHED'):
+        numbers_part.append(_get_def('STASHED') + str(stashed))
+    if not any((staged, conflicts, changed, untracked, stashed)):
+        if _get_def('CLEAN'):
+            numbers_part.append(_get_def('CLEAN'))
+    if numbers_part:
+        numbers_str = _get_def('NUMBERS_SEPARATOR').join(n + '{NO_COLOR}'
+                                                         for n in numbers_part)
+        prompt.append(numbers_str)
+
+    return _get_def('PARTS_SEPARATOR').join(prompt)
