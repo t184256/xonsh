@@ -10,117 +10,49 @@ import importlib
 import importlib.util
 import collections.abc as cabc
 
+import mutants
+
 __version__ = '0.1.1'
 
 
-class LazyObject(object):
+def LazyObject(load_func, ctx, name):
+    """
+    Lazily loads an object via the load function the first time an
+    attribute is accessed. Once loaded it will replace itself in the
+    provided context (typically the globals of the call site) with the
+    given name.
 
-    def __init__(self, load, ctx, name):
-        """Lazily loads an object via the load function the first time an
-        attribute is accessed. Once loaded it will replace itself in the
-        provided context (typically the globals of the call site) with the
-        given name.
+    For example, you can prevent the compilation of a regular expression
+    until it is actually used::
 
-        For example, you can prevent the compilation of a regular expreession
-        until it is actually used::
+        DOT = LazyObject((lambda: re.compile('.')), globals(), 'DOT')
 
-            DOT = LazyObject((lambda: re.compile('.')), globals(), 'DOT')
+    NOTE: it's a function now, not a class.
 
-        Parameters
-        ----------
-        load : function with no arguments
-            A loader function that performs the actual object construction.
-        ctx : Mapping
-            Context to replace the LazyObject instance in
-            with the object returned by load().
-        name : str
-            Name in the context to give the loaded object. This *should*
-            be the name on the LHS of the assignment.
-        """
-        self._lasdo = {
-            'loaded': False,
-            'load': load,
-            'ctx': ctx,
-            'name': name,
-            }
-
-    def _lazy_obj(self):
-        d = self._lasdo
-        if d['loaded']:
-            obj = d['obj']
+    Parameters
+    ----------
+    load_func : function with no arguments
+        A loader function that performs the actual object construction.
+    ctx : Mapping
+        Context to replace the LazyObject instance in
+        with the object returned by load().
+    name : str
+        Name in the context to give the loaded object. This *should*
+        be the name on the LHS of the assignment.
+    """
+    loaded = []
+    def load_and_mutate(obj):
+        if not loaded:
+            # Evaluate an object and try to load it in in ctx context once,
+            # hopefully overwriting the mutant in process
+            ctx[name] = obj = load_func()
+            loaded.append(obj)
         else:
-            obj = d['load']()
-            d['ctx'][d['name']] = d['obj'] = obj
-            d['loaded'] = True
+            # Seems that overwriting was not enough and mutant still exists.
+            # Continue proxying from a cache (may incur modest slowdown).
+            obj = loaded[0]
         return obj
-
-    def __getattribute__(self, name):
-        if name == '_lasdo' or name == '_lazy_obj':
-            return super().__getattribute__(name)
-        obj = self._lazy_obj()
-        return getattr(obj, name)
-
-    def __bool__(self):
-        obj = self._lazy_obj()
-        return bool(obj)
-
-    def __iter__(self):
-        obj = self._lazy_obj()
-        yield from obj
-
-    def __getitem__(self, item):
-        obj = self._lazy_obj()
-        return obj[item]
-
-    def __setitem__(self, key, value):
-        obj = self._lazy_obj()
-        obj[key] = value
-
-    def __delitem__(self, item):
-        obj = self._lazy_obj()
-        del obj[item]
-
-    def __call__(self, *args, **kwargs):
-        obj = self._lazy_obj()
-        return obj(*args, **kwargs)
-
-    def __lt__(self, other):
-        obj = self._lazy_obj()
-        return obj < other
-
-    def __le__(self, other):
-        obj = self._lazy_obj()
-        return obj <= other
-
-    def __eq__(self, other):
-        obj = self._lazy_obj()
-        return obj == other
-
-    def __ne__(self, other):
-        obj = self._lazy_obj()
-        return obj != other
-
-    def __gt__(self, other):
-        obj = self._lazy_obj()
-        return obj > other
-
-    def __ge__(self, other):
-        obj = self._lazy_obj()
-        return obj >= other
-
-    def __hash__(self):
-        obj = self._lazy_obj()
-        return hash(obj)
-
-    def __or__(self, other):
-        obj = self._lazy_obj()
-        return obj | other
-
-    def __str__(self):
-        return str(self._lazy_obj())
-
-    def __repr__(self):
-        return repr(self._lazy_obj())
+    return mutants.OnAccessMutant(None, load_and_mutate)
 
 
 def lazyobject(f):
